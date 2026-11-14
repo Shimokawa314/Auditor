@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#e9edf2">
+<meta name="apple-mobile-web-app-title" content="Auditor">
+<meta name="application-name" content="Auditor">
+<title>Auditor</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+  :root {
+    --bg: #e9edf2;
+    --ink: #1d2733;
+    --sub: #6b7785;
+    --paper: #ffffff;
+    --rule: #d9dee5;
+    --accent: #2f6fed;
+    --printer: #2a323d;
+    --stamp: #d93a3a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    -webkit-text-size-adjust: 100%;
+    padding: max(18px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+    overflow-x: hidden;
+  }
+  main { max-width: 420px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 800; letter-spacing: .02em; margin: 6px 2px 16px; display: flex; align-items: baseline; gap: 10px; }
+  h1 .sub { font-size: 12px; font-weight: 600; color: var(--sub); letter-spacing: .05em; }
+
+  /* 入力 */
+  .field {
+    background: #fff;
+    border-radius: 16px;
+    padding: 14px 16px 12px;
+    box-shadow: 0 1px 2px rgba(29,39,51,.06);
+  }
+  .field label { display: block; font-size: 12px; color: var(--sub); margin-bottom: 2px; }
+  .input-row { display: flex; align-items: baseline; gap: 6px; }
+  .yen { font-size: 26px; font-weight: 600; color: var(--sub); }
+  input {
+    flex: 1; min-width: 0;
+    border: none; outline: none; background: transparent;
+    font-family: inherit; font-size: 40px; font-weight: 700;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    caret-color: var(--accent);
+  }
+  input::placeholder { color: #c3cad3; }
+
+  .actions { display: flex; gap: 10px; margin-top: 12px; }
+  button {
+    border: none; border-radius: 14px;
+    font-family: inherit; font-size: 17px; font-weight: 700;
+    padding: 16px;
+    transition: transform .08s, opacity .15s;
+  }
+  button:active { transform: scale(.96); }
+  #calc { flex: 1; background: var(--accent); color: #fff; box-shadow: 0 4px 0 #1f4fb3; }
+  #calc:active { transform: translateY(3px); box-shadow: 0 1px 0 #1f4fb3; }
+  #calc:disabled { opacity: .35; box-shadow: none; }
+  #clear { width: 92px; background: #fff; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--rule); }
+
+  /* プリンター */
+  .printer { margin-top: 28px; position: relative; min-height: 120px; }
+  .printer-top {
+    position: relative; z-index: 3;
+    height: 38px;
+    border-radius: 12px 12px 6px 6px;
+    background: linear-gradient(180deg, #36404d, var(--printer));
+    box-shadow: 0 6px 14px rgba(29,39,51,.18);
+  }
+  .printer-top::after {        /* 排出口 */
+    content: "";
+    position: absolute; left: 14px; right: 14px; bottom: 9px;
+    height: 6px; border-radius: 3px;
+    background: #10151b;
+  }
+  .printer-top .name {
+    position: absolute; left: 16px; top: 7px;
+    font-size: 9px; letter-spacing: .2em; color: #8793a3; font-weight: 700;
+  }
+  .led {
+    position: absolute; right: 18px; top: 9px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #4b5563;
+  }
+  .printing .printer-top { animation: rattle .07s linear infinite; }
+  .printing .led { background: #3ddc84; box-shadow: 0 0 8px #3ddc84; animation: blink .2s steps(2) infinite; }
+  @keyframes rattle {
+    0%   { transform: translate(0, 0); }
+    25%  { transform: translate(-1px, 1px); }
+    50%  { transform: translate(1px, 0); }
+    75%  { transform: translate(0, -1px); }
+  }
+  @keyframes blink { 50% { opacity: .3; } }
+
+  .clip {                       /* 排出された紙が見える範囲 */
+    margin: -8px 24px 0;
+    height: 0;
+    overflow: hidden;
+    position: relative; z-index: 2;
+    transform-origin: 50% 0;
+  }
+  .clip.swing { animation: swing 1.1s ease-out; }
+  @keyframes swing {
+    0%   { transform: rotate(0); }
+    20%  { transform: rotate(1.6deg); }
+    45%  { transform: rotate(-1.1deg); }
+    70%  { transform: rotate(.5deg); }
+    100% { transform: rotate(0); }
+  }
+  .clip.tear { animation: tear .55s cubic-bezier(.5,0,.9,.6) forwards; }
+  @keyframes tear {
+    0%   { transform: translateY(0) rotate(0); opacity: 1; }
+    15%  { transform: translateY(-4px) rotate(-2deg); opacity: 1; }
+    100% { transform: translateY(220px) rotate(14deg); opacity: 0; }
+  }
+
+  .paper {
+    background: var(--paper);
+    padding: 16px 20px 32px;
+    font-variant-numeric: tabular-nums;
+    position: relative;
+    -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - 10px) no-repeat,
+                  conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 16px 10px repeat-x;
+            mask: linear-gradient(#000 0 0) top / 100% calc(100% - 10px) no-repeat,
+                  conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 16px 10px repeat-x;
+  }
+  .paper.thump { animation: thump .25s ease-out; }
+  @keyframes thump { 30% { transform: translateY(4px) scale(.99); } }
+
+  .meta {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: #9aa4b1; letter-spacing: .08em;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    margin-bottom: 8px;
+  }
+  .row-head {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: var(--sub);
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .line { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 0; }
+  .line + .line { border-top: 1px dashed var(--rule); }
+  .line .k { font-size: 14px; color: var(--sub); }
+  .line .v { font-size: 32px; font-weight: 700; letter-spacing: .01em; min-height: 1.2em; }
+  .line.tax .v { color: var(--accent); }
+  .line.inshi { display: none; }
+  .line.inshi.on { display: flex; }
+  .line.inshi .v { color: #d97706; }
+  .line .k small { display: block; font-size: 11px; color: #9aa4b1; margin-top: 2px; }
+  .typing::after {               /* 印字ヘッド */
+    content: "▌";
+    font-weight: 400;
+    color: #b7c0cc;
+    animation: blink .25s steps(2) infinite;
+  }
+
+  .foot {
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px dashed var(--rule);
+    padding-top: 12px;
+    min-height: 80px;
+  }
+  .foot .msg { font-size: 11px; color: #9aa4b1; line-height: 1.6; }
+
+  /* ハンコ */
+  .stamp {
+    position: relative;
+    width: 70px; height: 70px;
+    border: 3px solid var(--stamp);
+    border-radius: 50%;
+    color: var(--stamp);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-weight: 900; line-height: 1.1;
+    transform: rotate(-14deg);
+    opacity: 0;
+    mix-blend-mode: multiply;
+    margin-right: 4px;
+  }
+  .stamp::before {               /* 内側の線 */
+    content: ""; position: absolute; inset: 4px;
+    border: 1px solid var(--stamp); border-radius: 50%;
+  }
+  .stamp .s1 { font-size: 15px; letter-spacing: .05em; }
+  .stamp .s2 { font-size: 9px; letter-spacing: .1em; margin-top: 2px; font-family: ui-monospace, Menlo, monospace; }
+  .stamp.hit { animation: stamp .42s cubic-bezier(.3,1.5,.5,1) forwards; }
+  @keyframes stamp {
+    0%   { opacity: 0; transform: rotate(-30deg) scale(2.8); }
+    55%  { opacity: 1; transform: rotate(-12deg) scale(.9); }
+    100% { opacity: .9; transform: rotate(-14deg) scale(1); }
+  }
+  .ink {
+    position: absolute; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--stamp); opacity: 0;
+  }
+  .stamp.hit .ink { animation: ink .5s ease-out .2s forwards; }
+  @keyframes ink {
+    0%   { opacity: .9; transform: translate(0, 0) scale(1); }
+    100% { opacity: .55; transform: translate(var(--dx), var(--dy)) scale(.6); }
+  }
+
+  .empty-msg {
+    position: absolute; left: 0; right: 0; top: 56px;
+    text-align: center; font-size: 13px; color: var(--sub);
+    transition: opacity .2s;
+  }
+  .has-result .empty-msg { opacity: 0; }
+
+  .note { margin-top: 22px; font-size: 11px; color: var(--sub); text-align: center; line-height: 1.7; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+    .stamp.hit { opacity: .9; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Auditor<span class="sub">税抜・消費税 計算</span></h1>
+
+  <div class="field">
+    <label for="total">お会計（税込）</label>
+    <div class="input-row">
+      <span class="yen">¥</span>
+      <input id="total" type="text" inputmode="numeric" enterkeyhint="done" autocomplete="off" placeholder="0">
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="calc" type="button" disabled>計算</button>
+    <button id="clear" type="button">クリア</button>
+  </div>
+
+  <div class="printer" id="printer">
+    <div class="printer-top"><span class="name">AUDITOR</span><span class="led"></span></div>
+    <div class="clip" id="clip">
+      <div class="paper" id="paper">
+        <div class="meta"><span id="no">No.0001</span><span id="time">00:00</span></div>
+        <div class="row-head"><span>お会計（税込）</span><span id="echo"></span></div>
+        <div class="line tax" id="rowTax"><span class="k">消費税額（10%）</span><span class="v" id="tax"></span></div>
+        <div class="line" id="rowNet"><span class="k">税抜金額</span><span class="v" id="net"></span></div>
+        <div class="line inshi" id="rowInshi"><span class="k">収入印紙<small>現金払いのとき・カード払いは不要</small></span><span class="v" id="inshi"></span></div>
+        <div class="foot" id="rowFoot">
+          <span class="msg">10%対象・1円未満四捨五入<br>領収書に転記してください</span>
+          <div class="stamp" id="stamp">
+            <span class="s1">計算済</span><span class="s2" id="stampDate">11.14</span>
+            <i class="ink" style="left:-8px; top:20px; --dx:-6px; --dy:2px"></i>
+            <i class="ink" style="right:-6px; top:8px; --dx:5px; --dy:-4px"></i>
+            <i class="ink" style="left:24px; bottom:-8px; --dx:-2px; --dy:6px"></i>
+            <i class="ink" style="right:2px; bottom:4px; --dx:6px; --dy:5px; width:3px; height:3px"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="empty-msg">金額を入れて「計算」を押してください</p>
+  </div>
+
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const input = $('total'), calcBtn = $('calc');
+  const printer = $('printer'), clip = $('clip'), paper = $('paper'), stamp = $('stamp');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const fmt = n => '¥' + n.toLocaleString('ja-JP');
+  const pad = (n, w) => String(n).padStart(w, '0');
+
+  let count = 0;           // このページを開いてからの発行枚数
+  let phase = 'idle';      // idle | printing | done | tearing
+  let raf = null, timers = [];
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  const vibrate = p => { if (navigator.vibrate) try { navigator.vibrate(p); } catch (e) {} };
+
+  function digits() {
+    return input.value
+      .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+      .replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '').slice(0, 12);
+  }
+
+  function stopAll() {
+    cancelAnimationFrame(raf); raf = null;
+    timers.forEach(clearTimeout); timers = [];
+  }
+
+  function resetPaper() {
+    stopAll();
+    phase = 'idle';
+    clip.className = 'clip';
+    clip.style.height = '0px';
+    paper.classList.remove('thump');
+    stamp.classList.remove('hit');
+    printer.classList.remove('printing', 'has-result');
+    $('rowInshi').classList.remove('on');
+    for (const id of ['echo', 'tax', 'net', 'inshi']) { $(id).textContent = ''; $(id).classList.remove('typing'); }
+  }
+
+  // 結果が出ていたら、ちぎって落としてから次へ
+  function tearOff(next) {
+    if (phase === 'idle') { next && next(); return; }
+    if (phase === 'tearing') { pendingNext = next; return; }
+    stopAll();
+    printer.classList.remove('printing');
+    if (reduce) { resetPaper(); next && next(); return; }
+    phase = 'tearing';
+    pendingNext = next;
+    vibrate(10);
+    clip.classList.remove('swing');
+    void clip.offsetWidth;
+    clip.classList.add('tear');
+    later(() => { resetPaper(); const n = pendingNext; pendingNext = null; n && n(); }, 560);
+  }
+  let pendingNext = null;
+
+  // 1文字ずつ印字
+  function type(el, text, speed, done) {
+    if (reduce) { el.textContent = text; done && done(); return; }
+    let i = 0;
+    el.classList.add('typing');
+    const tick = () => {
+      el.textContent = text.slice(0, ++i);
+      if (i < text.length) later(tick, speed);
+      else { el.classList.remove('typing'); done && done(); }
+    };
+    tick();
+  }
+
+  // 収入印紙（第17号の1文書・売上代金の受取書）。税抜金額で判定
+  function stampDuty(net) {
+    if (net < 50000) return 0;
+    const table = [
+      [1e6, 200], [2e6, 400], [3e6, 600], [5e6, 1000], [1e7, 2000],
+      [2e7, 4000], [3e7, 6000], [5e7, 10000], [1e8, 20000],
+      [2e8, 40000], [3e8, 60000], [5e8, 100000], [1e9, 150000]
+    ];
+    for (const [max, yen] of table) if (net <= max) return yen;
+    return 200000;
+  }
+
+  function print(total) {
+    const tax = Math.floor((total * 10 + 55) / 110); // 税込×10/110 を四捨五入（整数演算）
+    const net = total - tax;
+    const now = new Date();
+
+    count++;
+    $('no').textContent = 'No.' + pad(count, 4);
+    $('time').textContent = `${pad(now.getHours(), 2)}:${pad(now.getMinutes(), 2)}`;
+    $('stampDate').textContent = `${now.getMonth() + 1}.${pad(now.getDate(), 2)}`;
+
+    const duty = stampDuty(net);
+    const texts = { echo: fmt(total), tax: fmt(tax), net: fmt(net), inshi: duty ? fmt(duty) : '' };
+    $('rowInshi').classList.toggle('on', duty > 0);   // 測る前に表示を決める
+    phase = 'printing';
+    printer.classList.add('has-result');
+
+    const H = paper.offsetHeight;
+    const rows = [
+      { id: 'echo', at: $('echo').parentElement.offsetTop, speed: 25 },
+      { id: 'tax',  at: $('rowTax').offsetTop, speed: 55 },
+      { id: 'net',  at: $('rowNet').offsetTop, speed: 55 }
+    ];
+    if (duty) rows.push({ id: 'inshi', at: $('rowInshi').offsetTop, speed: 55 });
+    const footAt = $('rowFoot').offsetTop;
+
+    if (reduce) {
+      clip.style.height = H + 'px';
+      for (const r of rows) $(r.id).textContent = texts[r.id];
+      finishStamp(true);
+      return;
+    }
+
+    printer.classList.add('printing');
+    vibrate([8, 40, 8, 40, 8, 40, 8]);
+
+    // 紙送り：ガッ、ガッと段階的に出てくる。行が出てきたら印字開始
+    const dur = 1500, t0 = performance.now();
+    let typingLeft = rows.length;
+    const started = new Set();
+    const step = now => {
+      const k = Math.min((now - t0) / dur, 1);
+      const h = Math.min(H, Math.round(H * k / 10) * 10);
+      clip.style.height = h + 'px';
+      for (const r of rows) {
+        if (!started.has(r.id) && h > r.at + 28) {
+          started.add(r.id);
+          type($(r.id), texts[r.id], r.speed, () => { if (--typingLeft === 0) maybeStamp(); });
+        }
+      }
+      if (k < 1) raf = requestAnimationFrame(step);
+      else { clip.style.height = H + 'px'; feedDone = true; maybeStamp(); }
+    };
+    let feedDone = false;
+    function maybeStamp() {
+      if (!feedDone || typingLeft > 0 || phase !== 'printing') return;
+      printer.classList.remove('printing');
+      clip.classList.add('swing');
+      later(() => finishStamp(false), 250);
+    }
+    skipTo = () => {           // タップで即完了
+      stopAll();
+      clip.style.height = H + 'px';
+      for (const r of rows) { $(r.id).textContent = texts[r.id]; $(r.id).classList.remove('typing'); }
+      printer.classList.remove('printing');
+      finishStamp(false);
+    };
+    raf = requestAnimationFrame(step);
+  }
+  let skipTo = null;
+
+  function finishStamp(quiet) {
+    phase = 'done';
+    stamp.classList.remove('hit');
+    void stamp.offsetWidth;
+    stamp.classList.add('hit');
+    if (quiet) return;
+    later(() => {
+      paper.classList.remove('thump'); void paper.offsetWidth; paper.classList.add('thump');
+      vibrate(30);
+    }, 180);
+  }
+
+  function calculate() {
+    const d = digits();
+    if (!d) return;
+    input.blur();
+    tearOff(() => print(Number(d)));
+  }
+
+  input.addEventListener('input', () => {
+    const d = digits();
+    input.value = d ? Number(d).toLocaleString('ja-JP') : '';
+    calcBtn.disabled = !d;
+    tearOff();
+  });
+
+  calcBtn.addEventListener('click', calculate);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); calculate(); } });
+
+  printer.addEventListener('click', () => { if (phase === 'printing' && skipTo) skipTo(); });
+
+  $('clear').addEventListener('click', () => {
+    input.value = '';
+    calcBtn.disabled = true;
+    tearOff();
+    input.focus();
+  });
+})();
+</script>
+</body>
+</html>
